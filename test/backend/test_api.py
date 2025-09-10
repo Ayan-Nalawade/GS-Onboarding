@@ -3,6 +3,7 @@ from backend.api.models.request_model import CommandRequest
 from backend.data.enums import CommandStatus
 from backend.utils.time import to_unix_time
 from datetime import datetime
+import logging
 
 def test_get_commands(fastapi_test_client: TestClient, commands_json):
     with fastapi_test_client as client: 
@@ -30,7 +31,19 @@ def test_create_command(fastapi_test_client: TestClient):
         assert isinstance(created_on_dt, datetime)
         assert isinstance(updated_on_dt, datetime)
 
-def test_delete_command_fail(fastapi_test_client: TestClient):
+def test_create_command_malformed(fastapi_test_client: TestClient):
+    with fastapi_test_client as client:
+        res = client.post("/commands/", json={}, headers={"Content-Type": "application/json"})
+        assert res.status_code == 422
+
+def test_create_command_invalid_type(fastapi_test_client: TestClient):
+    command = CommandRequest(command_type=999, params="123456789")
+    model_dump = command.model_dump()
+    with fastapi_test_client as client:
+        res = client.post("/commands/", json=model_dump, headers={"Content-Type": "application/json"})
+        assert res.status_code == 404
+
+def test_delete_command_not_found(fastapi_test_client: TestClient):
     with fastapi_test_client as client:
         res = client.delete("/commands/0") # Should never have an id of 0 in the db
         assert res.status_code == 404
@@ -47,9 +60,11 @@ def test_delete_command(fastapi_test_client: TestClient, default_datetime):
         assert result.get("command_type") == 2
         assert result.get("status") == CommandStatus.PENDING.value
         assert result.get("params") == f"1,{to_unix_time(default_datetime)}"
-        # TODO: Figure out a better way to check the times
-        assert result.get("created_on") 
-        assert result.get("updated_on")
+        
+        created_on_dt = datetime.fromisoformat(result.get("created_on"))
+        updated_on_dt = datetime.fromisoformat(result.get("updated_on"))
+        assert isinstance(created_on_dt, datetime)
+        assert isinstance(updated_on_dt, datetime)
 
 
 def test_main_commands(fastapi_test_client: TestClient):
@@ -73,4 +88,11 @@ def test_main_commands(fastapi_test_client: TestClient):
         assert main_command.get("format") == "int 1 byte, int 7 bytes" 
         assert main_command.get("data_size") == 8
         assert main_command.get("total_size") == 9
-        
+
+def test_logger_middleware(fastapi_test_client: TestClient, caplog):
+    with caplog.at_level(logging.INFO):
+        with fastapi_test_client as client:
+            res = client.get("/commands/")
+            assert res.status_code == 200
+            assert "Request: GET /commands/" in caplog.text
+            assert "Response Status Code: 200" in caplog.text

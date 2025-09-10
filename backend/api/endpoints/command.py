@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 
 from backend.api.models.request_model import CommandRequest
 from backend.api.models.response_model import CommandListResponse, CommandSingleResponse
-from backend.data.data_models import Command
+from backend.data.data_models import Command, MainCommand
 from backend.data.engine import get_db
 
 # Prefix: "/commands"
@@ -31,6 +31,9 @@ def create_command(payload: CommandRequest, db: Session = Depends(get_db)):
     :param payload: The data used to create an item
     :return: returns a json object with field of "data" under which there is the payload now pulled from the database 
     """
+    main_command = db.get(MainCommand, payload.command_type)
+    if not main_command:
+        raise HTTPException(status_code=404, detail="Command type not found")
     command = Command(command_type=payload.command_type, params=payload.params)
     db.add(command)
     db.commit()
@@ -52,7 +55,4 @@ def delete_command(id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Command not found")
     db.delete(command)
     db.commit()
-    # Return the list of commands after deletion
-    query = select(Command)
-    items = db.exec(query).all()
-    return {"data": items}
+    return get_commands(db)

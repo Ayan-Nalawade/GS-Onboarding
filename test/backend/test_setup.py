@@ -43,5 +43,3 @@ def test_command_setup(mock_db, id, command_type, params, default_datetime):
     assert command
     assert command.command_type == command_type
     assert command.params == params.format(unix_time=to_unix_time(default_datetime))
-
-
